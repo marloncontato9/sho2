@@ -1,7 +1,20 @@
 <?php
 // proxy.php
 
+// Configurar domínio permitido para CORS - altere para seu domínio real
+$allowedOrigin = '*';
+
+// Permitir apenas este domínio
+header("Access-Control-Allow-Origin: $allowedOrigin");
+header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
+header("Access-Control-Allow-Headers: Content-Type, Authorization");
 header("Content-Type: application/json");
+
+// Responder requisição OPTIONS para CORS preflight
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(204);
+    exit;
+}
 
 // Proteção simples com senha
 if (!isset($_GET['pass']) || $_GET['pass'] !== getenv('PROXY_PASSWORD')) {
@@ -58,8 +71,10 @@ curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
 $response = curl_exec($ch);
 
 if (curl_errno($ch)) {
+    http_response_code(500);
     echo json_encode(["error" => "Erro cURL: " . curl_error($ch)]);
 } else {
     echo $response;
 }
 curl_close($ch);
+exit;
