@@ -70,3 +70,4 @@ if (isset($data['data']['generateShortLink']['shortLink'])) {
         'debug' => $data
     ]);
 }
+
