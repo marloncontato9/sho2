@@ -1,34 +1,27 @@
 <?php
 header('Content-Type: application/json');
 
-// 🔒 Proteção com senha (parametro `pass`)
+// Proteção com senha
 $proxyPassword = getenv('PROXY_PASSWORD');
 if (!isset($_GET['pass']) || $_GET['pass'] !== $proxyPassword) {
     echo json_encode(['error' => 'Acesso negado.']);
     exit;
 }
 
-// 🔗 URL a ser encurtada
+// URL a ser encurtada
 $url = $_GET['url'] ?? '';
 if (!$url) {
     echo json_encode(['error' => 'URL não fornecida.']);
     exit;
 }
 
-// 🔐 Dados sensíveis da Shopee (via Render env)
+// Dados da Shopee (AppId e Secret)
 $credential = getenv('SHOPEE_API_ID');
 $secretKey  = getenv('SHOPEE_API_SECRET');
 $timestamp  = time();
 
-// 🧾 Montar string base para assinatura (adaptado)
-$stringToSign = "Credential=$credential&Url=$url&Timestamp=$timestamp";
-$signature = hash_hmac('sha256', $stringToSign, $secretKey);
-
-// 🧾 Cabeçalho de autenticação
-$authorization = "SHA256 Credential=$credential, Signature=$signature, Timestamp=$timestamp";
-
-// 🔄 Monta a query GraphQL
-$query = [
+// Montar o payload JSON conforme API GraphQL
+$payload = [
     'query' => 'mutation {
         generateShortLink(input: {
             originUrl: "' . $url . '",
@@ -39,7 +32,18 @@ $query = [
     }'
 ];
 
-// 🌐 Envio da requisição
+$payloadJson = json_encode($payload, JSON_UNESCAPED_SLASHES);
+
+// Montar string para assinatura: Credential + Timestamp + Payload + Secret
+$stringToSign = $credential . $timestamp . $payloadJson . $secretKey;
+
+// Calcular assinatura SHA256 hex lowercase
+$signature = hash('sha256', $stringToSign);
+
+// Montar header Authorization correto
+$authorization = "SHA256 Credential=$credential, Timestamp=$timestamp, Signature=$signature";
+
+// Configurar requisição HTTP POST para API Shopee
 $options = [
     'http' => [
         'method'  => 'POST',
@@ -47,7 +51,7 @@ $options = [
             'Content-Type: application/json',
             'Authorization: ' . $authorization,
         ],
-        'content' => json_encode($query),
+        'content' => $payloadJson,
         'ignore_errors' => true
     ]
 ];
@@ -55,7 +59,6 @@ $options = [
 $context = stream_context_create($options);
 $response = file_get_contents('https://open-api.affiliate.shopee.com.br/graphql', false, $context);
 
-// 🧩 Processar resposta
 if ($response === false) {
     echo json_encode(['error' => 'Erro na conexão com a API.']);
     exit;
