@@ -4,13 +4,11 @@
 // Configurar domínio permitido para CORS - altere para seu domínio real
 $allowedOrigin = '*';
 
-// Permitir apenas este domínio
 header("Access-Control-Allow-Origin: $allowedOrigin");
 header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization");
 header("Content-Type: application/json");
 
-// Responder requisição OPTIONS para CORS preflight
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
     exit;
@@ -29,11 +27,12 @@ $secret = getenv('SHOPEE_API_SECRET');
 $keyword = $_GET['keyword'] ?? 'moto';
 $sortType = $_GET['sortType'] ?? 2;
 $limit = $_GET['limit'] ?? 5;
+$page = $_GET['page'] ?? 1;  // NOVO: aceitar o parâmetro page
 $timestamp = time();
 
 $query = <<<GQL
 {
-  productOfferV2(keyword: "$keyword", sortType: $sortType, limit: $limit) {
+  productOfferV2(keyword: "$keyword", sortType: $sortType, limit: $limit, page: $page) {
     nodes {
       itemId
       productName
