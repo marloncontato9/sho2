@@ -1,72 +1,73 @@
 <?php
-// shorten.php
-
 header('Content-Type: application/json');
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
 
-// Autenticação (use a mesma do proxy.php)
-if (!isset($_GET['pass']) || $_GET['pass'] !== getenv('PROXY_PASSWORD')) {
-    http_response_code(403);
-    echo json_encode(["error" => "Acesso negado."]);
+// 🔒 Proteção com senha (parametro `pass`)
+$proxyPassword = getenv('PROXY_PASSWORD');
+if (!isset($_GET['pass']) || $_GET['pass'] !== $proxyPassword) {
+    echo json_encode(['error' => 'Acesso negado.']);
     exit;
 }
 
-// Configurações da API Shopee
-$appId = getenv('SHOPEE_API_ID');
-$secret = getenv('SHOPEE_API_SECRET');
-$timestamp = time();
-
-// Recebe os parâmetros
-$originUrl = $_GET['originUrl'] ?? '';
-$subIds = isset($_GET['subIds']) ? json_decode($_GET['subIds']) : [];
-
-// Validação
-if (empty($originUrl)) {
-    http_response_code(400);
-    echo json_encode(["error" => "originUrl é obrigatório"]);
+// 🔗 URL a ser encurtada
+$url = $_GET['url'] ?? '';
+if (!$url) {
+    echo json_encode(['error' => 'URL não fornecida.']);
     exit;
 }
 
-// Mutation GraphQL
-$mutation = <<<GQL
-mutation {
-    generateShortLink(input: {
-        originUrl: "$originUrl",
-        subIds: ["s1", "s2", "s3", "s4", "s5"]  // Pode ser dinâmico com implode(', ', $subIds)
-    }) {
-        shortLink
-    }
-}
-GQL;
+// 🔐 Dados sensíveis da Shopee (via Render env)
+$credential = getenv('SHOPEE_API_ID');
+$secretKey  = getenv('SHOPEE_API_SECRET');
+$timestamp  = time();
 
-// Assinatura da requisição
-$payload = json_encode(["query" => $mutation]);
-$signatureBase = $appId . $timestamp . $payload . $secret;
-$signature = hash('sha256', $signatureBase);
+// 🧾 Montar string base para assinatura (adaptado)
+$stringToSign = "Credential=$credential&Url=$url&Timestamp=$timestamp";
+$signature = hash_hmac('sha256', $stringToSign, $secretKey);
 
-// Headers
-$headers = [
-    "Content-Type: application/json",
-    "Authorization: SHA256 Credential=$appId, Timestamp=$timestamp, Signature=$signature"
+// 🧾 Cabeçalho de autenticação
+$authorization = "SHA256 Credential=$credential, Signature=$signature, Timestamp=$timestamp";
+
+// 🔄 Monta a query GraphQL
+$query = [
+    'query' => 'mutation {
+        generateShortLink(input: {
+            originUrl: "' . $url . '",
+            subIds: ["auto"]
+        }) {
+            shortLink
+        }
+    }'
 ];
 
-// Request para a API Shopee
-$ch = curl_init('https://open-api.affiliate.shopee.com.br/graphql');
-curl_setopt_array($ch, [
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_POST => true,
-    CURLOPT_POSTFIELDS => $payload,
-    CURLOPT_HTTPHEADER => $headers
-]);
+// 🌐 Envio da requisição
+$options = [
+    'http' => [
+        'method'  => 'POST',
+        'header'  => [
+            'Content-Type: application/json',
+            'Authorization: ' . $authorization,
+        ],
+        'content' => json_encode($query),
+        'ignore_errors' => true
+    ]
+];
 
-$response = curl_exec($ch);
+$context = stream_context_create($options);
+$response = file_get_contents('https://open-api.affiliate.shopee.com.br/graphql', false, $context);
 
-if (curl_errno($ch)) {
-    http_response_code(500);
-    echo json_encode(["error" => "Erro cURL: " . curl_error($ch)]);
-} else {
-    echo $response;
+// 🧩 Processar resposta
+if ($response === false) {
+    echo json_encode(['error' => 'Erro na conexão com a API.']);
+    exit;
 }
 
-curl_close($ch);
+$data = json_decode($response, true);
+
+if (isset($data['data']['generateShortLink']['shortLink'])) {
+    echo json_encode(['short' => $data['data']['generateShortLink']['shortLink']]);
+} else {
+    echo json_encode([
+        'error' => 'Erro ao encurtar link.',
+        'debug' => $data
+    ]);
+}
