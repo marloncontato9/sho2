@@ -1,63 +1,53 @@
 <?php
 header('Content-Type: application/json');
 
+// Verifica senha do proxy
 $proxyPassword = getenv('PROXY_PASSWORD');
 if (!isset($_GET['pass']) || $_GET['pass'] !== $proxyPassword) {
     echo json_encode(['error' => 'Acesso negado.']);
     exit;
 }
 
+// Pega URL a ser encurtada
 $url = $_GET['url'] ?? '';
 if (!$url) {
     echo json_encode(['error' => 'URL não fornecida.']);
     exit;
 }
 
+// Credenciais da Shopee
 $credential = getenv('SHOPEE_API_ID');
 $secretKey  = getenv('SHOPEE_API_SECRET');
 $timestamp  = time();
 
-// Pega subIds da query string, se não tiver usa valor default ["auto"]
-$subIdsRaw = $_GET['subIds'] ?? 'auto';  // exemplo: 'abc,def,ghi'
+// Pega subIds (separados por vírgula), padrão "auto"
+$subIdsRaw = $_GET['subIds'] ?? 'auto';
 $subIdsArray = array_map('trim', explode(',', $subIdsRaw));
 
-// Montar query GraphQL com \n
-$queryStr = <<<GQL
-mutation {
+// Monta query GraphQL
+$query = 'mutation {
     generateShortLink(input: {
-        originUrl: "$url",
-        subIds: [" . implode('","', $subIdsArray) . "]
+        originUrl: "' . $url . '",
+        subIds: ' . json_encode($subIdsArray) . '
     }) {
         shortLink
     }
-}
-GQL;
+}';
 
-// Corrige a montagem da string (precisa montar a string corretamente para PHP)
-$subIdsJson = json_encode($subIdsArray); // exemplo: ["abc","def","ghi"]
-
-$queryStr = <<<GQL
-mutation {
-    generateShortLink(input: {
-        originUrl: "$url",
-        subIds: $subIdsJson
-    }) {
-        shortLink
-    }
-}
-GQL;
-
-// Substituir quebras de linha por \n para o padrão do GraphQL
-$queryStr = str_replace("\n", "\\n", $queryStr);
-
-$payload = ['query' => $queryStr];
+// Monta payload JSON
+$payload = ['query' => $query];
 $payloadJson = json_encode($payload, JSON_UNESCAPED_SLASHES);
 
+// Gera string para assinatura: Credential + Timestamp + Payload + Secret
 $stringToSign = $credential . $timestamp . $payloadJson . $secretKey;
+
+// Calcula assinatura SHA256 (hex lowercase)
 $signature = hash('sha256', $stringToSign);
 
+// Monta header Authorization
 $authorization = "SHA256 Credential=$credential, Timestamp=$timestamp, Signature=$signature";
 
+// Configura contexto da requisição HTTP
 $options = [
     'http' => [
         'method'  => 'POST',
