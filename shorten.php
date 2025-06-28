@@ -17,29 +17,43 @@ $credential = getenv('SHOPEE_API_ID');
 $secretKey  = getenv('SHOPEE_API_SECRET');
 $timestamp  = time();
 
-// Montar query com \n explicitamente
+// Pega subIds da query string, se não tiver usa valor default ["auto"]
+$subIdsRaw = $_GET['subIds'] ?? 'auto';  // exemplo: 'abc,def,ghi'
+$subIdsArray = array_map('trim', explode(',', $subIdsRaw));
+
+// Montar query GraphQL com \n
 $queryStr = <<<GQL
 mutation {
     generateShortLink(input: {
         originUrl: "$url",
-        subIds: ["auto"]
+        subIds: [" . implode('","', $subIdsArray) . "]
     }) {
         shortLink
     }
 }
 GQL;
 
+// Corrige a montagem da string (precisa montar a string corretamente para PHP)
+$subIdsJson = json_encode($subIdsArray); // exemplo: ["abc","def","ghi"]
+
+$queryStr = <<<GQL
+mutation {
+    generateShortLink(input: {
+        originUrl: "$url",
+        subIds: $subIdsJson
+    }) {
+        shortLink
+    }
+}
+GQL;
+
+// Substituir quebras de linha por \n para o padrão do GraphQL
 $queryStr = str_replace("\n", "\\n", $queryStr);
 
 $payload = ['query' => $queryStr];
 $payloadJson = json_encode($payload, JSON_UNESCAPED_SLASHES);
 
-// String para assinatura
 $stringToSign = $credential . $timestamp . $payloadJson . $secretKey;
-
-// Debug (remova ou comente depois)
-error_log("StringToSign: $stringToSign");
-
 $signature = hash('sha256', $stringToSign);
 
 $authorization = "SHA256 Credential=$credential, Timestamp=$timestamp, Signature=$signature";
