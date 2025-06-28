@@ -1,49 +1,49 @@
 <?php
 header('Content-Type: application/json');
 
-// Proteção com senha
 $proxyPassword = getenv('PROXY_PASSWORD');
 if (!isset($_GET['pass']) || $_GET['pass'] !== $proxyPassword) {
     echo json_encode(['error' => 'Acesso negado.']);
     exit;
 }
 
-// URL a ser encurtada
 $url = $_GET['url'] ?? '';
 if (!$url) {
     echo json_encode(['error' => 'URL não fornecida.']);
     exit;
 }
 
-// Dados da Shopee (AppId e Secret)
 $credential = getenv('SHOPEE_API_ID');
 $secretKey  = getenv('SHOPEE_API_SECRET');
 $timestamp  = time();
 
-// Montar o payload JSON conforme API GraphQL
-$payload = [
-    'query' => 'mutation {
-        generateShortLink(input: {
-            originUrl: "' . $url . '",
-            subIds: ["auto"]
-        }) {
-            shortLink
-        }
-    }'
-];
+// Montar query com \n explicitamente
+$queryStr = <<<GQL
+mutation {
+    generateShortLink(input: {
+        originUrl: "$url",
+        subIds: ["auto"]
+    }) {
+        shortLink
+    }
+}
+GQL;
 
+$queryStr = str_replace("\n", "\\n", $queryStr);
+
+$payload = ['query' => $queryStr];
 $payloadJson = json_encode($payload, JSON_UNESCAPED_SLASHES);
 
-// Montar string para assinatura: Credential + Timestamp + Payload + Secret
+// String para assinatura
 $stringToSign = $credential . $timestamp . $payloadJson . $secretKey;
 
-// Calcular assinatura SHA256 hex lowercase
+// Debug (remova ou comente depois)
+error_log("StringToSign: $stringToSign");
+
 $signature = hash('sha256', $stringToSign);
 
-// Montar header Authorization correto
 $authorization = "SHA256 Credential=$credential, Timestamp=$timestamp, Signature=$signature";
 
-// Configurar requisição HTTP POST para API Shopee
 $options = [
     'http' => [
         'method'  => 'POST',
