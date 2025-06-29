@@ -19,22 +19,20 @@ $timestamp  = time();
 
 $subIdsRaw = $_GET['subIds'] ?? 'auto';
 $subIdsArray = array_map('trim', explode(',', $subIdsRaw));
-$subIdsJson = json_encode($subIdsArray);
+$subIdsFormatted = json_encode($subIdsArray, JSON_UNESCAPED_SLASHES);
 
 $query = <<<GQL
 mutation {
     generateShortLink(input: {
         originUrl: "$url",
-        subIds: $subIdsJson
+        subIds: $subIdsFormatted
     }) {
         shortLink
     }
 }
 GQL;
 
-$payload = ['query' => $query];
-$payloadJson = json_encode($payload, JSON_UNESCAPED_SLASHES);
-
+$payloadJson = json_encode(['query' => $query], JSON_UNESCAPED_SLASHES);
 $stringToSign = $credential . $timestamp . $payloadJson . $secretKey;
 $signature = hash('sha256', $stringToSign);
 
@@ -70,4 +68,3 @@ if (isset($data['data']['generateShortLink']['shortLink'])) {
         'debug' => $data
     ]);
 }
-
